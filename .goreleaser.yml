@@ -15,6 +15,8 @@ builds:
         goarch: 386
       - goos: windows
         goarch: arm
+      - goos: windows
+        goarch: 386
 
     flags:
       - -trimpath
