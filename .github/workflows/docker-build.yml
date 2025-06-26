@@ -1,4 +1,4 @@
-name: Python CI/CD with Docker (Tag Trigger)
+name: goland CI/CD with Docker (Tag Trigger)
 
 on:
   workflow_dispatch:  # 允许手动触发
