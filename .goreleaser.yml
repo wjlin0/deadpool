@@ -7,21 +7,21 @@ builds:
     binary: deadpool
     env:
       - CGO_ENABLED=0
-
-    goos: [windows,linux,darwin]
-    goarch: [amd64,386,arm,arm64]
+    goos: [windows, linux, darwin]
+    goarch: [amd64, 386, arm, arm64]
     ignore:
       - goos: darwin
         goarch: 386
       - goos: windows
         goarch: arm
       - goos: windows
+        goarch: arm64
+      - goos: windows
         goarch: 386
-
     flags:
+      - -ldflags=-s -w  # 关键修复：去掉外层引号
       - -trimpath
-      - -ldflags="-s -w"
-      - -gcflags="-l"
+      - -gcflags=-l     # 同理修复 gcflags
 
 archives:
   - format: zip
@@ -29,4 +29,3 @@ archives:
 
 checksum:
   name_template: "{{ .ProjectName }}-linux-checksums.txt"
-
