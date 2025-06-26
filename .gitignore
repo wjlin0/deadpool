@@ -1,0 +1,9 @@
+.idea
+dist
+text
+*.exe
+*.pprof
+*.csv
+*.txt
+*.json
+*.tmp

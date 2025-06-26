@@ -1,0 +1,54 @@
+listener:
+    ip: 127.0.0.1
+    port: 1080
+    auths: []
+checkSock:
+    checkURL:
+        - https://beian.miit.gov.cn
+    checkRspKeywords:
+        - 'location.href=location.pathname+location.search'
+    maxConcurrentReq: 100
+    checkInterval: 8
+    minSize: 20
+checkGeolocate:
+    enabled: true
+    checkInterval: 30
+    checkURL:
+        - https://qifu-api.baidubce.com/ip/local/geo/v1/district
+        - https://ipapi.co/json
+    excludeKeywords:
+        - HK
+        - 香港
+    excludeKeywordCondition: or
+    includeKeywords:
+        - '"country": "CN"'
+        - 中国
+    includeKeywordCondition: or
+
+
+sourcesConfig:
+    hunter:
+        enabled: false
+        apiKey: "2312ba0ebe08e0f2f9e8723226d5538488691f4b34d56d83c603eb6902cc48ee"
+        endpoint: https://hunter.qianxin.com/openApi/search
+        query: 'protocol=="socks5" && protocol.banner="No authentication"&& ip.country="CN"'
+        maxSize: 500
+        queryTimeout: 60
+        checkInterval: 50
+    quake:
+        enabled: false
+        apiKey: ""
+        endpoint: https://quake.360.net/api/v3/search/quake_service
+        query: ""
+        queryTimeout: 60
+        checkInterval: 50
+    file:
+        enabled: false
+        path: proxies.txt
+        queryTimeout: 60
+        checkInterval: 50
+    checkerProxy:
+        enabled: true
+        endpoint: https://api.checkerproxy.net/v1/landing/archive
+        checkInterval: 50
+        queryOutTime: 60

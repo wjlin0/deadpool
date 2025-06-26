@@ -1,0 +1,68 @@
+name: Python CI/CD with Docker (Tag Trigger)
+
+on:
+  workflow_dispatch:  # 允许手动触发
+  push:
+   tags:
+     - 'v*'  # 只在匹配 'v*'（如 v1.0.0、v2.1.3） 的 Tag 推送时触发
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. 检出代码
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      # 4. 获取当前 Tag 版本号（去除 v 前缀）
+      - name: Get Tag Version
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+
+      # 5. 构建 Docker 镜像
+      - name: Build Docker Image
+        run: |
+          docker build -t wjlin0/deadpool:${{ env.VERSION }} \
+            -t ghcr.io/wjlin0/deadpool:${{ env.VERSION }} \
+            -t registry.cn-hangzhou.aliyuncs.com/wjlin0/deadpool:${{ env.VERSION }} \
+            -t wjlin0/deadpool:latest \
+            -t ghcr.io/wjlin0/deadpool:latest \
+            -t registry.cn-hangzhou.aliyuncs.com/wjlin0/deadpool:latest .
+
+  
+
+      # 6. 登录并推送到 DockerHub
+      - name: Push to DockerHub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Push Image to DockerHub
+        run: |
+          docker push wjlin0/deadpool:${{ env.VERSION }}
+          docker push wjlin0/deadpool:latest
+
+      # 7. 登录并推送到 GitHub Container Registry
+      - name: Push to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Push Image to GitHub Container Registry
+        run: |
+          docker push ghcr.io/wjlin0/deadpool:${{ env.VERSION }}
+          docker push ghcr.io/wjlin0/deadpool:latest
+
+      # 8. 登录并推送到阿里云容器镜像服务
+      - name: Push to Aliyun Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: registry.cn-hangzhou.aliyuncs.com
+          username: ${{ secrets.ALIYUN_USERNAME }}
+          password: ${{ secrets.ALIYUN_PASSWORD }}
+      - name: Push Image to Aliyun Container Registry
+        run: |
+          docker push registry.cn-hangzhou.aliyuncs.com/wjlin0/deadpool:${{ env.VERSION }}
+          docker push registry.cn-hangzhou.aliyuncs.com/wjlin0/deadpool:latest
