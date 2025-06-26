@@ -8,7 +8,7 @@ RUN git clone https://github.com/wjlin0/deadpool.git /build
 
 # 设置工作目录并构建
 WORKDIR /build
-RUN go mod tidy &&  go  build -o deadpool  # 输出小写名称
+RUN go mod tidy &&  go build  -ldflags="-s -w" -gcflags="-l" -trimpath -o deadpool cmd/deadpool/deadpool.go  # 输出小写名称
 
 # 第二阶段：运行阶段
 FROM alpine:latest
