@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  deadpool:
+    image: wjlin0/deadpool:latest
+    container_name: deadpool
+    restart: unless-stopped
+    dns: 114.114.114.114
+    ports:
+      - "1080:1080"
+    volumes:
+      - ~/.deadpool:/app

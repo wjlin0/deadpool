@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  deadpool:
+    image: registry.cn-hangzhou.aliyuncs.com/wjlin0/deadpool:latest
+    container_name: deadpool
+    restart: unless-stopped
+    ports:
+      - "1080:1080"
+    volumes:
+      - ~/.deadpool:/app

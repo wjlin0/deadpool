@@ -52,14 +52,14 @@ func ParserConfigOptions(opts *types.Options) (*types.ConfigOptions, error) {
 		// 3. 文件不存在时创建默认配置（完全保持您的默认值）
 		defaultConfig := &types.ConfigOptions{
 			Listener: &types.Listener{
-				IP:    "127.0.0.1", // 保持您的默认值
-				Port:  1080,        // 保持您的默认值
-				Auths: []string{},  // 保持您的默认值
+				IP:    "0.0.0.0",  // 保持您的默认值
+				Port:  1080,       // 保持您的默认值
+				Auths: []string{}, // 保持您的默认值
 			},
 			CheckSock: &types.CheckSock{
 				CheckURL:         []string{"https://www.baidu.com"}, // 保持您的默认值
 				CheckRspKeywords: []string{"百度一下"},                  // 保持您的默认值
-				MaxConcurrentReq: 100,                               // 保持您的默认值
+				MaxConcurrentReq: 50,                                // 保持您的默认值
 				CheckInterval:    60,                                // 保持您的默认值
 				MinSize:          50,                                // 保持您的默认值
 			},
@@ -87,7 +87,7 @@ func ParserConfigOptions(opts *types.Options) (*types.ConfigOptions, error) {
 					Endpoint:      "https://quake.360.net/api/v3/search/quake_service",
 					Query:         "service:socks5  AND country: \"CN\" AND response:\"No authentication\"",
 					CheckInterval: 60,
-					QueryTimeout:  60,
+					QueryTimeout:  5,
 					MaxSize:       50,
 				},
 				File: &types.FileSource{
@@ -99,7 +99,7 @@ func ParserConfigOptions(opts *types.Options) (*types.ConfigOptions, error) {
 					Enabled:       true,
 					Endpoint:      "https://api.checkerproxy.net/v1/landing/archive",
 					CheckInterval: 60,
-					QueryTimeout:  60 * 24,
+					QueryTimeout:  60,
 				},
 			},
 			Options: opts,
@@ -139,7 +139,7 @@ func ParserConfigOptions(opts *types.Options) (*types.ConfigOptions, error) {
 
 	// 设置Listener默认值
 	if config.Listener.IP == "" {
-		config.Listener.IP = "127.0.0.1"
+		config.Listener.IP = "0.0.0.0"
 	}
 	if config.Listener.Port == 0 {
 		config.Listener.Port = 1080
@@ -156,7 +156,7 @@ func ParserConfigOptions(opts *types.Options) (*types.ConfigOptions, error) {
 		config.CheckSock.CheckRspKeywords = []string{"百度一下"}
 	}
 	if config.CheckSock.MaxConcurrentReq == 0 {
-		config.CheckSock.MaxConcurrentReq = 100
+		config.CheckSock.MaxConcurrentReq = 50
 	}
 	if config.CheckSock.CheckInterval == 0 {
 		config.CheckSock.CheckInterval = 60
@@ -261,7 +261,7 @@ func ParserConfigOptions(opts *types.Options) (*types.ConfigOptions, error) {
 			Enabled:       true,
 			Endpoint:      "https://api.checkerproxy.net/v1/landing/archive",
 			CheckInterval: 60,
-			QueryTimeout:  60 * 24,
+			QueryTimeout:  60,
 		}
 	} else {
 		if config.SourcesConfig.CheckerProxy.Endpoint == "" {
@@ -271,7 +271,7 @@ func ParserConfigOptions(opts *types.Options) (*types.ConfigOptions, error) {
 			config.SourcesConfig.CheckerProxy.CheckInterval = 60
 		}
 		if config.SourcesConfig.CheckerProxy.QueryTimeout == 0 {
-			config.SourcesConfig.CheckerProxy.QueryTimeout = 60 * 24
+			config.SourcesConfig.CheckerProxy.QueryTimeout = 60
 		}
 	}
 

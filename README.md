@@ -6,6 +6,30 @@ deadpool是一个用于代理池管理的工具，它能够自动检测代理的
 - 提供一个代理池供其他程序使用
 - 仅内网SOCKS5，但会提供高效的代理
 # 使用方法
+## docker-compose
+```shell
+mkdir ~/.deadpool
+wget https://raw.githubusercontent.com/wjlin0/deadpool/refs/heads/main/scrips/compose/docker-compose-cn.yml
+docker-compose -f docker-compose-cn.yml up -d
+
+# 查看日志出现 代理可用 即可使用
+docker-compose -f docker-compose-cn.yml logs
+export http_proxy=socks5://127.0.0.1:1080
+curl cip.cc
+
+```
+
+
+## docker
+```shell
+docker run -d \
+  --name deadpool \
+  --restart unless-stopped \
+  -p 1080:1080 \
+  -v ~/.deadpool:/app \
+  registry.cn-hangzhou.aliyuncs.com/wjlin0/deadpool:latest
+```
+## 命令行
 ```shell
 ./deadpool -c config.yaml
 ```
