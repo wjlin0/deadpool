@@ -64,6 +64,7 @@ func ParserConfigOptions(opts *types.Options) (*types.ConfigOptions, error) {
 				MinSize:          50,                                // 保持您的默认值
 			},
 			CheckGeolocate: &types.CheckGeolocate{
+				Enabled: true,
 				CheckURL: []string{
 					"https://qifu-api.baidubce.com/ip/local/geo/v1/district",
 					"https://ipapi.co/json",
@@ -131,7 +132,17 @@ func ParserConfigOptions(opts *types.Options) (*types.ConfigOptions, error) {
 		config.CheckSock = &types.CheckSock{}
 	}
 	if config.CheckGeolocate == nil {
-		config.CheckGeolocate = &types.CheckGeolocate{}
+		config.CheckGeolocate = &types.CheckGeolocate{
+			Enabled: true,
+			CheckURL: []string{
+				"https://qifu-api.baidubce.com/ip/local/geo/v1/district",
+				"https://ipapi.co/json",
+			}, // 保持您的默认值
+			ExcludeKeywords:         []string{"澳门", "香港", "台湾"}, // 保持您的默认值
+			IncludeKeywords:         []string{"中国"},             // 保持您的默认值
+			IncludeKeywordCondition: "or",
+			ExcludeKeywordCondition: "or",
+		}
 	}
 	if config.SourcesConfig == nil {
 		config.SourcesConfig = &types.SourcesConfig{}

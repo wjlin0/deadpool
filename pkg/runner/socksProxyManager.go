@@ -302,36 +302,40 @@ func (m *SocksProxyManager) checkProxyAlive(proxyInfo *ProxyInfo) (bool, time.Du
 	}
 
 	// 4. 发送请求到检查URL
-	for _, u := range m.config.CheckSock.CheckURL {
-		resp, err := httpClient.Get(u)
-		if err != nil {
-			//gologger.Error().Msgf("%s:%s", proxyInfo.URL, err.Error())
-			continue
-		}
-		defer resp.Body.Close()
-		//gologger.Info().Msgf("%s -> %s %s", proxyInfo.URL, u, resp.Status)
-
-		// 5. 检查关键词 (如果配置了)
-		if len(m.config.CheckSock.CheckRspKeywords) != 0 {
-			body, err := io.ReadAll(resp.Body)
+	if len(m.config.CheckSock.CheckRspKeywords) > 0 {
+		for _, u := range m.config.CheckSock.CheckURL {
+			resp, err := httpClient.Get(u)
 			if err != nil {
+				//gologger.Error().Msgf("%s:%s", proxyInfo.URL, err.Error())
 				continue
 			}
+			defer resp.Body.Close()
+			//gologger.Info().Msgf("%s -> %s %s", proxyInfo.URL, u, resp.Status)
 
-			for _, keyword := range m.config.CheckSock.CheckRspKeywords {
-				if keyword == "" {
-					return true, time.Since(start)
+			// 5. 检查关键词 (如果配置了)
+			if len(m.config.CheckSock.CheckRspKeywords) != 0 {
+				body, err := io.ReadAll(resp.Body)
+				if err != nil {
+					continue
 				}
-				if strings.Contains(string(body), keyword) {
-					return true, time.Since(start)
+
+				for _, keyword := range m.config.CheckSock.CheckRspKeywords {
+					if keyword == "" {
+						return true, time.Since(start)
+					}
+					if strings.Contains(string(body), keyword) {
+						return true, time.Since(start)
+					}
 				}
+				return false, 0
 			}
-			return false, 0
-		}
 
+			return true, time.Since(start)
+		}
+	} else {
 		return true, time.Since(start)
 	}
-	return true, time.Since(start)
+	return false, time.Since(start)
 }
 
 func (m *SocksProxyManager) checkGeolocate(proxyInfo *ProxyInfo) bool {
