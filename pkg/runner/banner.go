@@ -10,7 +10,7 @@ const (
  / .__/\_,_/ \__//_//_//___/ \__/ \_,_//_//_/
 /_/
 `
-	Version          = `1.0.0`
+	Version          = `1.0.1`
 	userName         = "wjlin0"
 	pathScanRepoName = "deadpool"
 	toolName         = "deadpool"

@@ -23,7 +23,7 @@ checkSock: # SOCKS5 代理检测配置
     checkRspKeywords: # 检测响应中必须包含的关键词 支持多个 只要匹配到一项就会返回
         - '百度一下'
     maxConcurrentReq: 100 # 代理检测最大并发
-    checkInterval: 8 # 检测延迟/间隔（单位：秒）
+    checkInterval: 8 # 超时时间（单位：秒）
     minSize: 20 # 代理池最小大小
 checkGeolocate: # 地理位置检测配置
     enabled: true # 是否启用地理位置检测
@@ -50,17 +50,18 @@ sourcesConfig: # 代理来源配置
         maxSize: 500 # 最大查询结果数量
         queryTimeout: 60 # hunter 查询间隔（单位：分）
         checkInterval: 50 # 这个参数是通过 hunter 得到的IP 对应的每一个IP存活检测的间隔（单位：秒）
-    quake: # Quake 数据源配置 (还没写暂时用不了)
+    quake: # Quake 
         enabled: false # 是否启用 Quake 数据源
         apiKey: "" # Quake API 密钥
+        maxSize: 500 # 最大查询结果数量
         endpoint: https://quake.360.net/api/v3/search/quake_service # Quake API 端点
-        query: "" # 查询条件
-        queryTimeout: 60 # Quake 查询间隔（单位：秒）
+        query: 'service: socks5  AND country: "CN" AND response:"No authentication"' # 查询条件
+        queryTimeout: 60 # Quake 查询间隔（单位：分）
         checkInterval: 50 # 这个参数是通过 Quake 得到的IP 对应的每一个IP存活检测的间隔（单位：秒）
     file: # 文件数据源配置
         enabled: false # 是否启用文件数据源
         path: proxies.txt # 代理文件路径
-        queryTimeout: 60 # 文件数据源查询间隔（单位：秒）
+        queryTimeout: 60 # 文件数据源查询间隔（单位：分）
         checkInterval: 50 # 这个参数是通过 file 得到的IP 对应的每一个IP存活检测的间隔（单位：秒）
     checkerProxy: # CheckerProxy 数据源配置
         enabled: true # 是否启用 CheckerProxy 数据源

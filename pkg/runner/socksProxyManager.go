@@ -68,6 +68,9 @@ func NewSocksProxyManager(cfg *types.ConfigOptions) *SocksProxyManager {
 	if cfg.SourcesConfig.CheckerProxy.Enabled {
 		sources = append(sources, source.NewCheckerProxySource(cfg.SourcesConfig.CheckerProxy.Endpoint, cfg.SourcesConfig.CheckerProxy.QueryTimeout))
 	}
+	if cfg.SourcesConfig.Quake.Enabled {
+		sources = append(sources, source.NewQuakeSource(cfg.SourcesConfig.Quake.APIKey, cfg.SourcesConfig.Quake.Endpoint, cfg.SourcesConfig.Quake.Query, cfg.SourcesConfig.Quake.MaxSize, cfg.SourcesConfig.Quake.QueryTimeout))
+	}
 
 	spm.sources = sources
 	return spm
@@ -347,7 +350,7 @@ func (m *SocksProxyManager) checkGeolocate(proxyInfo *ProxyInfo) bool {
 			},
 			&net.Dialer{Timeout: timeout})
 		if err != nil {
-			//gologger.Info().Msgf("%s : %s", proxyInfo.URL, err)
+			gologger.Warning().Msgf("%s : %s", proxyInfo.URL, err)
 			continue
 		}
 
@@ -372,7 +375,7 @@ func (m *SocksProxyManager) checkGeolocate(proxyInfo *ProxyInfo) bool {
 		//	Timeout: time.Duration(m.config.CheckSock.CheckInterval) * time.Second,
 		//}).Get(m.config.CheckGeolocate.CheckURL)
 		if err != nil {
-			//gologger.Error().Msgf("%s : %s", proxyInfo.URL, err)
+			gologger.Warning().Msgf("%s : %s", proxyInfo.URL, err)
 
 			continue
 		}
@@ -511,7 +514,7 @@ func (m *SocksProxyManager) DialContext(ctx context.Context, network, addr strin
 		args = append(args, remoteAddr)
 		args = append(args, localAddr)
 		args = append(args, exitIP)
-		//gologger.Info().Msgf(format, args...)
+		gologger.Info().Msgf(format, args...)
 	}
 
 	return conn, err
@@ -718,6 +721,7 @@ func (m *SocksProxyManager) StartAutoSource() {
 							continue
 						}
 						m.mu.RUnlock()
+						gologger.Warning().Msgf("%s 获得 %s 正在检测代理可用性", s.Name(), p)
 
 						wg.Add()
 						go func(proxy string) {
