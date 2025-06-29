@@ -11,7 +11,6 @@
 | `maxSize`       | int    | ❌    | `100`   | 最大获取数（防止Fofa类型的，造成浪费）                                     |
 | `type`          | string | ❌    | `text`  | 响应类型： • `json` - JSON格式解析 • `text` - 文本行解析                |
 | `enablePaging`  | bool   | ❌    | `false` | 是否启用自动分页 启动后要设置 `{page}` 占位符                               |
-| `pageSize`      | int    | ❌    | `50`    | 每页请求数量（仅`enablePaging=true`时生效）                           |
 | `checkInterval` | int    | ❌    | `60`    | 数据的代理存活探测的时间间隔（秒）                                         |
 | `queryTimeout`  | int    | ❌    | `60`    | 数据源探测的时间间隔（分）                                             |
 | `extract`       | map | ❌    | `{}`    | 响应专用配置，详见下文                                               |
