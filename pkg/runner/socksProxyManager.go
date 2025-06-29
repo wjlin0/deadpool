@@ -739,18 +739,26 @@ func (m *SocksProxyManager) shouldCheckNow(p *ProxyInfo, now time.Time) bool {
 
 	return now.Sub(p.LastChecked) > interval
 }
+func (m *SocksProxyManager) AliveProxy() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	count := 0
+	for _, p := range m.proxyMap {
+		if p.IsAlive {
+			count++
+		}
+	}
+	return count
+}
 
 func (m *SocksProxyManager) StartAutoSource() {
 	wg := sizedwaitgroup.New(m.config.CheckSock.MaxConcurrentReq)
 	wg2 := sizedwaitgroup.New(4)
 	go func() {
 		for {
-			m.mu.RLock()
-			if len(m.proxyMap) >= m.config.CheckSock.MinSize {
-				m.mu.RUnlock()
+			if m.AliveProxy() > m.config.CheckSock.MinSize {
 				continue
 			}
-			m.mu.RUnlock()
 
 			for _, s := range m.sources {
 				if !s.ValidateLastFetchTime() {
@@ -783,15 +791,11 @@ func (m *SocksProxyManager) StartAutoSource() {
 							defer wg.Done()
 							m.AddProxy(ctx, proxy, s.Name())
 						}(p)
-
-						m.mu.RLock()
-						if len(m.proxyMap) >= m.config.CheckSock.MinSize {
+						if m.AliveProxy() >= m.config.CheckSock.MinSize {
 							gologger.Warning().Msgf("当前代理数量 %d 大于等于最小数量 %d", len(m.proxyMap), m.config.CheckSock.MinSize)
-							m.mu.RUnlock()
 							cancel()
 							return
 						}
-						m.mu.RUnlock()
 					}
 
 					wg.Wait()

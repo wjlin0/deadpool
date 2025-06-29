@@ -244,6 +244,17 @@ customs:
   checkInterval: 50
   queryTimeout: 5
 ```
+### [闪臣](https://h.shanchendaili.com/)
+```yaml
+- endpoint: https://sch.shanchendaili.com/flow-api.html?action=get_ip&key=xxxxxxxx&count=5&type=text
+  method: GET
+  type: text
+  queryTimeout: 4
+  checkInterval: 210
+```
+
+
+
 
 ### www.89ip.cn （没有可用的IP）
 
