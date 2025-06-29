@@ -339,7 +339,7 @@ func (m *SocksProxyManager) checkProxyAlive(ctx context.Context, proxyInfo *Prox
 			//	return url.Parse(proxyInfo.URL)
 			//},
 		},
-		Timeout: timeout,
+		//Timeout: timeout,
 	}
 	defaultOptions := retryablehttp.DefaultOptionsSingle
 	defaultOptions.HttpClient = httpClient
