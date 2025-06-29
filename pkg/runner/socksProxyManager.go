@@ -756,7 +756,7 @@ func (m *SocksProxyManager) StartAutoSource() {
 	wg2 := sizedwaitgroup.New(4)
 	go func() {
 		for {
-			if m.AliveProxy() > m.config.CheckSock.MinSize {
+			if m.AliveProxy() >= m.config.CheckSock.MinSize {
 				continue
 			}
 
