@@ -1,14 +1,17 @@
 package runner
 
 import (
+	"errors"
 	"fmt"
 	"github.com/projectdiscovery/goflags"
 	"github.com/projectdiscovery/gologger"
+	"github.com/projectdiscovery/gologger/levels"
 	"github.com/wjlin0/deadpool/pkg/types"
 	updateutils "github.com/wjlin0/utils/update"
 	"gopkg.in/yaml.v3"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 func ParserOptions() *types.Options {
@@ -19,11 +22,20 @@ func ParserOptions() *types.Options {
 		set.StringVarP(&options.ConfigPath, "config", "c", "config.yaml", "配置文件"),
 		set.StringVarP(&options.AliveDataPath, "alive-data-path", "adp", "aliveDataPath.json", "存储的存活IP列表"),
 	)
+	set.CreateGroup("Config", "配置",
+		set.BoolVar(&options.Debug, "debug", false, "调试模式"),
+	)
+
 	set.CreateGroup("Update", "更新",
 		set.CallbackVar(updateutils.GetUpdateToolCallback(pathScanRepoName, Version), "update", "更新版本"),
 		set.BoolVarP(&options.DisableUpdateCheck, "disable-update-check", "duc", false, "跳过自动检查更新"),
 	)
 	_ = set.Parse()
+
+	if options.Debug {
+		gologger.DefaultLogger.SetMaxLevel(levels.LevelDebug)
+	}
+
 	// show banner
 	showBanner()
 	if !options.DisableUpdateCheck {
@@ -69,8 +81,8 @@ func ParserConfigOptions(opts *types.Options) (*types.ConfigOptions, error) {
 					"https://qifu-api.baidubce.com/ip/local/geo/v1/district",
 					"https://ipapi.co/json",
 				}, // 保持您的默认值
-				ExcludeKeywords:         []string{"澳门", "香港", "台湾"}, // 保持您的默认值
-				IncludeKeywords:         []string{"中国"},             // 保持您的默认值
+				ExcludeKeywords:         []string{"澳门", "香港", "台湾"},            // 保持您的默认值
+				IncludeKeywords:         []string{"中国", "\"country\": \"CN\""}, // 保持您的默认值
 				IncludeKeywordCondition: "or",
 				ExcludeKeywordCondition: "or",
 			},
@@ -102,6 +114,7 @@ func ParserConfigOptions(opts *types.Options) (*types.ConfigOptions, error) {
 					CheckInterval: 60,
 					QueryTimeout:  60,
 				},
+				Customs: []*types.Custom{},
 			},
 			Options: opts,
 		}
@@ -138,8 +151,8 @@ func ParserConfigOptions(opts *types.Options) (*types.ConfigOptions, error) {
 				"https://qifu-api.baidubce.com/ip/local/geo/v1/district",
 				"https://ipapi.co/json",
 			}, // 保持您的默认值
-			ExcludeKeywords:         []string{"澳门", "香港", "台湾"}, // 保持您的默认值
-			IncludeKeywords:         []string{"中国"},             // 保持您的默认值
+			ExcludeKeywords:         []string{"澳门", "香港", "台湾"},      // 保持您的默认值
+			IncludeKeywords:         []string{"\"country\": \"CN\""}, // 保持您的默认值
 			IncludeKeywordCondition: "or",
 			ExcludeKeywordCondition: "or",
 		}
@@ -191,7 +204,7 @@ func ParserConfigOptions(opts *types.Options) (*types.ConfigOptions, error) {
 	}
 
 	if config.CheckGeolocate.IncludeKeywords == nil {
-		config.CheckGeolocate.IncludeKeywords = []string{"中国", "CN"}
+		config.CheckGeolocate.IncludeKeywords = []string{"中国", "\"country\": \"CN\""}
 	}
 	if config.CheckGeolocate.IncludeKeywordCondition == "" {
 		config.CheckGeolocate.IncludeKeywordCondition = "or"
@@ -283,6 +296,103 @@ func ParserConfigOptions(opts *types.Options) (*types.ConfigOptions, error) {
 		}
 		if config.SourcesConfig.CheckerProxy.QueryTimeout == 0 {
 			config.SourcesConfig.CheckerProxy.QueryTimeout = 60
+		}
+	}
+
+	if config.SourcesConfig.Customs != nil || len(config.SourcesConfig.Customs) > 0 {
+		for i, c := range config.SourcesConfig.Customs {
+			if c.Endpoint == "" {
+				//gologger.Fatal().Msgf("Customs[%d].Endpoint is required\n", i)
+				return nil, errors.New(fmt.Sprintf("Customs[%d].endpoint is required\n", i))
+			}
+			// 判断 c.ResponseType 是否为 json 、 text
+
+			if c.ResponseType == "" {
+				gologger.Info().Msgf("Customs[%d].type is required, use default value: text\n", i)
+				c.ResponseType = "text"
+			}
+
+			if c.ResponseType != "json" && c.ResponseType != "text" && c.ResponseType != "xpath" {
+				//gologger.Fatal().Msgf("Customs[%d].ResponseType must be json or txt\n", i)
+				return nil, errors.New(fmt.Sprintf("Customs[%d].type must be json or text or xpath\n", i))
+			}
+			if c.ResponseType == "json" {
+				if c.Extract == nil {
+					return nil, errors.New(fmt.Sprintf("Customs[%d].json is required\n", i))
+				}
+				if c.Extract.ProxyListPath == "" {
+					return nil, errors.New(fmt.Sprintf("Customs[%d].json.path is required\n", i))
+				}
+				if c.Extract.IPField == "" {
+					gologger.Info().Msgf("Customs[%d].json.ipField is required, use default value: ip\n", i)
+					c.Extract.IPField = "ip"
+				}
+				if c.Extract.PortField == "" {
+					gologger.Info().Msgf("Customs[%d].json.portField is required, use default value: port\n", i)
+					c.Extract.PortField = "port"
+				}
+				if c.Extract.UserField == "" {
+					gologger.Info().Msgf("Customs[%d].json.userField is required, use default value: username\n", i)
+					c.Extract.UserField = "username"
+				}
+				if c.Extract.PasswordField == "" {
+					gologger.Info().Msgf("Customs[%d].json.passField is required, use default value: password\n", i)
+					c.Extract.PasswordField = "password"
+				}
+
+			}
+			if c.ResponseType == "xpath" {
+				if c.Extract == nil {
+					return nil, errors.New(fmt.Sprintf("Customs[%d].xpath is required\n", i))
+				}
+				if c.Extract.ProxyListPath == "" {
+					return nil, errors.New(fmt.Sprintf("Customs[%d].xpath.path is required\n", i))
+				}
+				if c.Extract.IPField == "" {
+					gologger.Info().Msgf("Customs[%d].xpath.ipField is required, use default value: ip\n", i)
+					c.Extract.IPField = "ip"
+				}
+				if c.Extract.PortField == "" {
+					gologger.Info().Msgf("Customs[%d].xpath.portField is required, use default value: port\n", i)
+					c.Extract.PortField = "port"
+				}
+				if c.Extract.UserField == "" {
+					gologger.Info().Msgf("Customs[%d].xpath.userField is required, use default value: username\n", i)
+					c.Extract.UserField = "username"
+				}
+				if c.Extract.PasswordField == "" {
+					gologger.Info().Msgf("Customs[%d].xpath.passField is required, use default value: password\n", i)
+					c.Extract.PasswordField = "password"
+				}
+
+			}
+
+			if c.EnablePaging {
+				// 检查endpoint和body中是否至少有一个包含分页参数
+				hasPageInEndpoint := strings.Contains(c.Endpoint, "{page}")
+				hasSizeInEndpoint := strings.Contains(c.Endpoint, "{pageSize}")
+				hasPageInBody := strings.Contains(c.Body, "{page}")
+				hasSizeInBody := strings.Contains(c.Body, "{pageSize}")
+
+				if !(hasPageInEndpoint || hasPageInBody) {
+					return nil, errors.New("启用分页功能时，必须在endpoint或body中包含{page}参数")
+				}
+				if !(hasSizeInEndpoint || hasSizeInBody) {
+					gologger.Warning().Msgf("启用分页功能时，无 {pageSize} 参数，将使用默认值或自定义字段\n")
+				}
+
+			}
+
+			if c.MaxSize == 0 {
+				c.MaxSize = 100
+			}
+			if c.QueryTimeout == 0 {
+				c.QueryTimeout = 60
+			}
+			if c.CheckInterval == 0 {
+				c.CheckInterval = 60
+			}
+
 		}
 	}
 

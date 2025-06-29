@@ -46,7 +46,7 @@ func (h *CheckerProxySource) Fetch(ctx context.Context) (<-chan string, error) {
 				return
 			default:
 				// 计算当前检查的日期（从昨天开始往前推）
-				checkDate := time.Now().AddDate(0, 0, -1-daysChecked).Format("2006-01-02")
+				checkDate := time.Now().AddDate(0, 0, -daysChecked).Format("2006-01-02")
 				reqUrl := fmt.Sprintf("%s/%s", h.endpoint, checkDate)
 
 				gologger.Info().Msgf("Fetching proxies for date: %s", reqUrl)

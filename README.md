@@ -63,8 +63,6 @@ checkGeolocate: # 地理位置检测配置
         - '"country": "CN"'
         - 中国
     includeKeywordCondition: or # 包含关键词的条件（and/or）
-
-
 sourcesConfig: # 代理来源配置
     hunter: # Hunter 数据源配置
         enabled: false # 是否启用 Hunter 数据源
@@ -92,7 +90,10 @@ sourcesConfig: # 代理来源配置
         endpoint: https://api.checkerproxy.net/v1/landing/archive # CheckerProxy API 端点
         queryOutTime: 60 # CheckerProxy 查询间隔（单位：分）
         checkInterval: 50 # 这个参数是通过 CheckerProxy 得到的IP 对应的每一个IP存活检测的间隔（单位：秒）
+    customs: [] # 自定义数据源 详细查看 ./doc/custom.md
 ```
+
+若上诉无法满足，你对数据源的获取 那么请查看 [自定义数据源文档](./doc/custom.md) 里面详细介绍了数据源的获取
 
 
 

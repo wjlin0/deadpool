@@ -28,6 +28,7 @@ func main() {
 	// 启动自动维护服务
 	dialFunc := scpm.Start()
 
+	//socks.ListenSocksDefault("tcp", ":12345")
 	// 创建SOCKS5服务器配置
 	conf := &socks5.Config{
 		Dial: func(ctx context.Context, network, addr string) (net.Conn, error) {

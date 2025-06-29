@@ -5,11 +5,12 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"github.com/peakedshout/go-socks"
 	"github.com/projectdiscovery/gologger"
+	"github.com/projectdiscovery/retryablehttp-go"
 	"github.com/remeh/sizedwaitgroup"
 	"github.com/wjlin0/deadpool/pkg/source"
 	"github.com/wjlin0/deadpool/pkg/types"
-	"golang.org/x/net/proxy"
 	"io"
 	"log"
 	"net"
@@ -71,6 +72,11 @@ func NewSocksProxyManager(cfg *types.ConfigOptions) *SocksProxyManager {
 	if cfg.SourcesConfig.Quake.Enabled {
 		sources = append(sources, source.NewQuakeSource(cfg.SourcesConfig.Quake.APIKey, cfg.SourcesConfig.Quake.Endpoint, cfg.SourcesConfig.Quake.Query, cfg.SourcesConfig.Quake.MaxSize, cfg.SourcesConfig.Quake.QueryTimeout))
 	}
+	if cfg.SourcesConfig.Customs != nil && len(cfg.SourcesConfig.Customs) > 0 {
+		for i, custom := range cfg.SourcesConfig.Customs {
+			sources = append(sources, source.NewCustomSource(fmt.Sprintf("custom-%d", i+1), custom.Endpoint, custom.Method, custom.Headers, custom.Body, custom.Extract, custom.ResponseType, custom.QueryTimeout, custom.EnablePaging, custom.MaxSize))
+		}
+	}
 
 	spm.sources = sources
 	return spm
@@ -85,6 +91,29 @@ func NewSocksProxyManagerWithFile(cfg *types.ConfigOptions, filename string) (*S
 	}
 
 	return m, nil
+}
+func (p *ProxyInfo) NewDialer(baseDialer socks.Dialer) (sd socks.Dialer, err error) {
+	if baseDialer == nil {
+		baseDialer = &net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}
+	}
+
+	if p.Username != "" || p.Password != "" {
+		sd, err = socks.SOCKS5CONNECT("tcp", net.JoinHostPort(p.IP, strconv.Itoa(p.Port)), &socks.S5Auth{
+			Socks5AuthPASSWORD: &socks.S5AuthPassword{
+				User:     p.Username,
+				Password: p.Password,
+				Cb:       socks.DefaultAuthConnCb,
+			},
+		}, baseDialer)
+	} else {
+		sd, err = socks.SOCKS5CONNECT("tcp", net.JoinHostPort(p.IP, strconv.Itoa(p.Port)), &socks.S5Auth{
+			Socks5AuthNOAUTH: socks.DefaultAuthConnCb,
+		}, baseDialer)
+	}
+	return sd, err
 }
 
 // NextProxy 获取下一个可用代理(轮询方式)
@@ -145,7 +174,7 @@ func (m *SocksProxyManager) AddProxies(proxyURLs []string, s string) {
 				return
 			}
 			// 进行存活检测
-			isAlive, latency := m.checkProxyAlive(proxyInfo)
+			isAlive, latency := m.checkProxyAlive(context.Background(), proxyInfo)
 			proxyInfo.IsAlive = isAlive
 			proxyInfo.Latency = latency
 
@@ -216,11 +245,17 @@ func (m *SocksProxyManager) LoadFromFile(filename string) error {
 	}
 
 	// 将解析的数据复制到proxyMap
+	wg := sizedwaitgroup.New(m.config.CheckSock.MaxConcurrentReq)
 
 	for u, pi := range proxyInfos {
+		wg.Add()
 		// 确保URL与key一致
-		go m.AddProxy(u, pi.Source)
+		go func() {
+			defer wg.Done()
+			m.AddProxy(context.Background(), u, pi.Source)
+		}()
 	}
+	wg.Wait()
 
 	return nil
 }
@@ -276,37 +311,49 @@ func tryRepairJSON(data []byte) ([]byte, bool) {
 }
 
 // checkProxyAlive 检测SOCKS5代理是否存活
-func (m *SocksProxyManager) checkProxyAlive(proxyInfo *ProxyInfo) (bool, time.Duration) {
+func (m *SocksProxyManager) checkProxyAlive(ctx context.Context, proxyInfo *ProxyInfo) (bool, time.Duration) {
 	timeout := time.Duration(m.config.CheckSock.CheckInterval) * time.Second
 	start := time.Now()
-
 	// 1. 创建SOCKS5拨号器
-	dialer, err := proxy.SOCKS5("tcp",
-		net.JoinHostPort(proxyInfo.IP, strconv.Itoa(proxyInfo.Port)),
-		&proxy.Auth{
-			User:     proxyInfo.Username,
-			Password: proxyInfo.Password,
-		},
-		&net.Dialer{Timeout: timeout})
-	if err != nil {
-		return false, 0
+	baseDialer := &net.Dialer{
+		Timeout:   timeout,
+		KeepAlive: timeout,
 	}
+
+	sd, _ := proxyInfo.NewDialer(baseDialer)
 
 	// 2. 创建HTTP客户端
+	// 3. 发起请求
 	httpClient := &http.Client{
 		Transport: &http.Transport{
-			Dial:            dialer.Dial,
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			DisableKeepAlives: false, // 确保这是false
+			// 禁用连接复用
+			ForceAttemptHTTP2: false, // 禁用 HTTP/2
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+			DialContext: func(_ctx context.Context, network, addr string) (net.Conn, error) {
+				return sd.DialContext(ctx, network, addr) // 代理解析目标地址
+			},
+			//Proxy: func(req *http.Request) (*url.URL, error) {
+			//	return url.Parse(proxyInfo.URL)
+			//},
 		},
-		Timeout: timeout,
 	}
+	defaultOptions := retryablehttp.DefaultOptionsSingle
+	defaultOptions.HttpClient = httpClient
+	defaultOptions.Timeout = timeout
+	defaultOptions.RetryWaitMax = timeout
+	defaultOptions.RetryMax = 0
+	client := retryablehttp.NewClient(defaultOptions)
 
 	// 4. 发送请求到检查URL
 	if len(m.config.CheckSock.CheckRspKeywords) > 0 {
 		for _, u := range m.config.CheckSock.CheckURL {
-			resp, err := httpClient.Get(u)
+			start = time.Now()
+			resp, err := client.Get(u)
 			if err != nil {
-				//gologger.Error().Msgf("%s:%s", proxyInfo.URL, err.Error())
+				gologger.Error().Msgf("%s:%s", proxyInfo.URL, err.Error())
 				continue
 			}
 			defer resp.Body.Close()
@@ -327,7 +374,7 @@ func (m *SocksProxyManager) checkProxyAlive(proxyInfo *ProxyInfo) (bool, time.Du
 						return true, time.Since(start)
 					}
 				}
-				return false, 0
+				continue
 			}
 
 			return true, time.Since(start)
@@ -338,46 +385,60 @@ func (m *SocksProxyManager) checkProxyAlive(proxyInfo *ProxyInfo) (bool, time.Du
 	return false, time.Since(start)
 }
 
-func (m *SocksProxyManager) checkGeolocate(proxyInfo *ProxyInfo) bool {
+func (m *SocksProxyManager) checkGeolocate(ctx context.Context, proxyInfo *ProxyInfo) bool {
 	// 1. 检查功能开关
 	if !m.config.CheckGeolocate.Enabled {
 		return true
 	}
-	for _, u := range m.config.CheckGeolocate.CheckURL {
-		timeout := time.Duration(m.config.CheckGeolocate.CheckInterval) * time.Second
-		// 2. 创建代理客户端
-		dialer, err := proxy.SOCKS5("tcp",
-			net.JoinHostPort(proxyInfo.IP, strconv.Itoa(proxyInfo.Port)),
-			&proxy.Auth{
-				User:     proxyInfo.Username,
-				Password: proxyInfo.Password,
-			},
-			&net.Dialer{Timeout: timeout})
-		if err != nil {
-			gologger.Warning().Msgf("%s : %s", proxyInfo.URL, err)
-			continue
-		}
+	timeout := time.Duration(m.config.CheckGeolocate.CheckInterval) * time.Second
 
-		// 3. 发起请求
-		client := &http.Client{
-			Timeout: timeout,
-			Transport: &http.Transport{Dial: dialer.Dial,
-				TLSClientConfig: &tls.Config{
-					InsecureSkipVerify: true,
-				},
+	baseDialer := &net.Dialer{
+		Timeout:   timeout,
+		KeepAlive: timeout,
+	}
+
+	sd, _ := proxyInfo.NewDialer(baseDialer)
+
+	// 2. 创建代理客户端
+	//dialer, err := proxy.SOCKS5("tcp",
+	//	net.JoinHostPort(proxyInfo.IP, strconv.Itoa(proxyInfo.Port)),
+	//	&proxy.Auth{
+	//		User:     proxyInfo.Username,
+	//		Password: proxyInfo.Password,
+	//	},
+	//	&net.Dialer{Timeout: timeout})
+	//if err != nil {
+	//	gologger.Warning().Msgf("%s : %s", proxyInfo.URL, err)
+	//	return false
+	//}
+
+	// 3. 发起请求
+	httpClient := &http.Client{
+		Transport: &http.Transport{
+			ForceAttemptHTTP2: false,
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
 			},
-		}
-		req, _ := http.NewRequest("GET", u, nil)
+			DialContext: func(_ctx context.Context, network string, address string) (net.Conn, error) {
+				return sd.DialContext(ctx, network, address)
+			},
+		},
+		Timeout: timeout,
+	}
+	defaultOptions := retryablehttp.DefaultOptionsSingle
+	defaultOptions.HttpClient = httpClient
+	defaultOptions.Timeout = timeout
+	defaultOptions.RetryWaitMax = timeout
+	defaultOptions.RetryMax = 0
+	client := retryablehttp.NewClient(defaultOptions)
+	//client := httpClient
+	for _, u := range m.config.CheckGeolocate.CheckURL {
+		//req, _ := http.NewRequest("GET", u, nil)
+		req, _ := retryablehttp.NewRequest("GET", u, nil)
 		req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36")
 
 		resp, err := client.Do(req)
 
-		//resp, err := (&http.Client{
-		//	Transport: &http.Transport{Dial: dialer.Dial,
-		//		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		//	},
-		//	Timeout: time.Duration(m.config.CheckSock.CheckInterval) * time.Second,
-		//}).Get(m.config.CheckGeolocate.CheckURL)
 		if err != nil {
 			gologger.Warning().Msgf("%s : %s", proxyInfo.URL, err)
 
@@ -476,28 +537,18 @@ func (m *SocksProxyManager) DialContext(ctx context.Context, network, addr strin
 	}
 
 	// 3. 创建SOCKS5拨号器
-	socksDialer, err := proxy.SOCKS5(
-		"tcp",
-		net.JoinHostPort(proxyInfo.IP, strconv.Itoa(proxyInfo.Port)),
-		&proxy.Auth{
-			User:     proxyInfo.Username,
-			Password: proxyInfo.Password,
-		},
-		baseDialer,
-	)
-	if err != nil {
-		gologger.Error().Msgf("failed to create SOCKS5 dialer: %v", err)
-		return nil, fmt.Errorf("failed to create SOCKS5 dialer: %w", err)
-	}
+
+	sd, _ := proxyInfo.NewDialer(baseDialer)
 
 	// 4. 尝试连接
 	var conn net.Conn
-	if cd, ok := socksDialer.(interface {
+	var err error
+	if cd, ok := sd.(interface {
 		DialContext(ctx context.Context, network, addr string) (net.Conn, error)
 	}); ok {
 		conn, err = cd.DialContext(ctx, network, addr)
 	} else {
-		conn, err = m.dialWithContext(ctx, socksDialer, network, addr)
+		conn, err = m.dialWithContext(ctx, sd, network, addr)
 	}
 
 	format := ""
@@ -533,12 +584,12 @@ func (m *SocksProxyManager) getExitIP(proxyInfo *ProxyInfo) string {
 }
 
 // 辅助方法：带上下文的手动拨号
-func (m *SocksProxyManager) dialWithContext(ctx context.Context, dialer proxy.Dialer, network, addr string) (net.Conn, error) {
+func (m *SocksProxyManager) dialWithContext(ctx context.Context, sd socks.Dialer, network, addr string) (net.Conn, error) {
 	connChan := make(chan net.Conn, 1)
 	errChan := make(chan error, 1)
 
 	go func() {
-		conn, err := dialer.Dial(network, addr)
+		conn, err := sd.Dial(network, addr)
 		if err != nil {
 			errChan <- err
 			return
@@ -596,7 +647,7 @@ func parseProxyURL(proxyURL string, s string) (*ProxyInfo, error) {
 	}, nil
 }
 
-func (m *SocksProxyManager) AddProxy(proxyURL string, s string) {
+func (m *SocksProxyManager) AddProxy(ctx context.Context, proxyURL string, s string) {
 
 	// 判断 源是否存在 是否在 proxyMap 中
 	m.mu.RLock()
@@ -612,11 +663,11 @@ func (m *SocksProxyManager) AddProxy(proxyURL string, s string) {
 		return
 	}
 
-	if !m.checkGeolocate(proxyInfo) {
+	if !m.checkGeolocate(ctx, proxyInfo) {
 		return
 	}
 
-	isAlive, latency := m.checkProxyAlive(proxyInfo)
+	isAlive, latency := m.checkProxyAlive(ctx, proxyInfo)
 	proxyInfo.IsAlive = isAlive
 	proxyInfo.Latency = latency
 	proxyInfo.LastChecked = time.Now()
@@ -647,7 +698,7 @@ func (m *SocksProxyManager) StartAutoCheck() {
 				go func(proxy *ProxyInfo) {
 					defer wg.Done()
 
-					isAlive, latency := m.checkProxyAlive(proxy)
+					isAlive, latency := m.checkProxyAlive(context.Background(), proxy)
 
 					m.mu.Lock()
 					proxy.IsAlive = isAlive
@@ -730,11 +781,12 @@ func (m *SocksProxyManager) StartAutoSource() {
 						wg.Add()
 						go func(proxy string) {
 							defer wg.Done()
-							m.AddProxy(proxy, s.Name())
+							m.AddProxy(ctx, proxy, s.Name())
 						}(p)
 
 						m.mu.RLock()
 						if len(m.proxyMap) >= m.config.CheckSock.MinSize {
+							gologger.Warning().Msgf("当前代理数量 %d 大于等于最小数量 %d", len(m.proxyMap), m.config.CheckSock.MinSize)
 							m.mu.RUnlock()
 							cancel()
 							return

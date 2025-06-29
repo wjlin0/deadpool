@@ -72,7 +72,7 @@ func (q *QuakeSource) Fetch(ctx context.Context) (<-chan string, error) {
 					"latest": true,
 				}
 				body, _ := json.MarshalIndent(data, "", "  ")
-
+				gologger.Info().Msgf("fetching %v proxies from %v", size, q.endpoint)
 				req, err := http.NewRequestWithContext(ctx, "POST", reqUrl, bytes.NewBuffer(body))
 				if err != nil {
 					return
